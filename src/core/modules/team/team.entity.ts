@@ -1,5 +1,5 @@
 import { BelongsTo, Column, DataType, ForeignKey, Model, Table } from "sequelize-typescript";
-import { User } from "../users/user.entity";
+import { User } from "../users/User.entity";
 
 @Table
 export class Team extends Model<Team> {
@@ -19,10 +19,10 @@ export class Team extends Model<Team> {
 
   @ForeignKey(() => User)
   @Column({
-    type: DataType.BIGINT,
+    type: DataType.STRING,
     allowNull: false,
   })
-  userId: number;
+  userId: string;
 
   @BelongsTo(() => User)
   user: User;

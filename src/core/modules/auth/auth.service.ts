@@ -1,20 +1,104 @@
 import {
   BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
-import { User } from '../users/user.entity';
+import { User } from '../users/User.entity';
+import { MailService } from '../mail/mail.service';
+import { UploadService } from 'src/core/upload/upload.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService, // Injeksi MailService
+    private readonly uploadService: UploadService,
   ) {}
 
+
+
+
+  async forgotPassword(email: string) {
+    
+    const user = await this.userService.findOneByEmail(email);
+    if (!user) {
+      throw new NotFoundException('Email is not associated with a user.');
+    }
+
+    const resetPasswordToken = this.jwtService.sign(
+      { email },
+      { expiresIn: '60s' },
+    );
+
+    const resetLink = `http://192.168.1.4:3000/authentication/repassword`;
+
+    const emailContent = `
+      <p>Hello!</p>
+      <p>You have requested to reset your password. Please click the link below to reset it:</p>
+      <p><a href="${resetLink}">Reset Password</a></p>
+      <p>If you did not request this, please ignore this email.</p>
+    `;
+
+    // Simpan token reset password ke dalam basis data untuk validasi nanti
+    user.resetPasswordExpires = resetPasswordToken;
+    await user.save();
+
+    
+    // Kirim email verifikasi dengan token reset password ke pengguna
+    this.mailService.sendForgotPasswordEmail(user.email, emailContent);
+
+    return {message: 'Password reset email sent successfully' , resetPasswordToken};
+
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    newRepassword: string,
+  ): Promise<string> {
+    try {
+      const decodedToken = this.jwtService.verify(token); // Verifikasi token
+      const user = await this.userService.findOneByEmail(decodedToken.email);
+      if (!user) {
+        throw new NotFoundException('User not found.');
+      }
+
+      // Validasi kata sandi baru dan konfirmasi kata sandi
+      if (newPassword !== newRepassword) {
+        throw new BadRequestException(
+          'Password and confirmation password do not match.',
+        );
+      }
+
+      // Validasi waktu kedaluwarsa token
+      if (user.resetPasswordExpires && new Date() > new Date(user.resetPasswordExpires)) {
+        
+      throw new BadRequestException('Reset password link has expired. Please request a new one.');
+    }
+
+      // Hash kata sandi baru
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Perbarui kata sandi pengguna di basis data
+      user.password = hashedPassword;
+
+      // Kemudian, Anda dapat menghapus token reset password dari basis data
+      user.resetPasswordExpires = null;
+      await user.save();
+
+      // Kemudian, Anda dapat mengembalikan respons sukses
+      return 'Password reset successfully';
+    } catch (error) {
+      throw new BadRequestException('Invalid or expired token.');
+    }
+  }
   private failedLoginAttempts = new Map<string, number>();
 
   async validateUser(username: string, pass: string) {
@@ -23,8 +107,9 @@ export class AuthService {
       this.failedLoginAttempts.has(username) &&
       this.failedLoginAttempts.get(username) >= 3
     ) {
-      throw new BadRequestException(
-        'Anda telah mencapai batas login gagal. Tunggu beberapa saat sebelum mencoba lagi.',
+      throw new HttpException
+      ('Anda telah mencapai batas login gagal. Tunggu beberapa saat sebelum mencoba lagi dalam 1 menit',
+      HttpStatus.OK,
       );
     }
 
@@ -48,8 +133,9 @@ export class AuthService {
       const currentAttempts = this.failedLoginAttempts.get(username) || 0;
       this.failedLoginAttempts.set(username, currentAttempts + 1);
 
-      throw new BadRequestException(
-        'Gagal masuk. Pastikan Anda Mengisi username dan password dengan benar.',
+      throw new HttpException(
+        'Login Gagal, Email atau Password Tidak Sesuai.',
+        HttpStatus.CREATED,
       );
     }
 
@@ -62,31 +148,51 @@ export class AuthService {
     return { user, token };
   }
 
-  public async create(user) {
-    // hash the password
-    const pass = await this.hashPassword(user.password);
+  private generateRandomPassword(): string {
+    const characters =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const passwordLength = 12; // Panjang kata sandi yang diinginkan
+    let password = '';
 
-    // Check if password and repassword match
-    if (user.password !== user.repassword) {
-      throw new BadRequestException('Password and repassword do not match');
+    for (let i = 0; i < passwordLength; i++) {
+      const randomIndex = Math.floor(Math.random() * characters.length);
+      password += characters[randomIndex];
     }
+
+    return password;
+  }
+
+  
+
+  public async create(user) {
+    // Generate a random password
+    const randomPassword = this.generateRandomPassword();
+
+    // Hash the random password
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
     // Omit repassword from the user object
     const { repassword, ...userWithoutRepassword } = user;
 
-    // create the user
+    // Create the user with the random password
     const newUser = await this.userService.create({
       ...userWithoutRepassword,
-      password: pass,
+      password: hashedPassword,
     });
+
+    // Send the random password to the user's email
+    await this.mailService.sendRandomPasswordEmail(
+      newUser.email,
+      randomPassword,
+    );
 
     // tslint:disable-next-line: no-string-literal
     const { password, ...result } = newUser['dataValues'];
 
-    // generate token
+    // Generate token
     const token = await this.generateToken(result);
 
-    // return the user and the token
+    // Return the user and the token
     return { user: result, token };
   }
 
@@ -109,7 +215,10 @@ export class AuthService {
       user.password,
     );
     if (!isCurrentPasswordValid) {
-      throw new BadRequestException('Kata sandi saat ini salah.');
+      throw new HttpException
+      ('Kata Sandi Saat Ini Salah!',
+      HttpStatus.CREATED,
+      );
     }
 
     // Hash kata sandi yang baru
@@ -120,6 +229,16 @@ export class AuthService {
   }
 
   // auth.service.ts
+  async deleteUser(userNip: number): Promise<void> {
+    const user = await this.userService.findOneById(userNip);
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userNip} not found`);
+    }
+
+    // Hapus pengguna dari layanan pengguna
+    await this.userService.deleteUser(userNip);
+  }
 
   async updateUser(
     userId: number,
@@ -142,9 +261,10 @@ export class AuthService {
       );
 
       if (existingUserWithSameEmail) {
-        throw new BadRequestException(
-          'Email sudah digunakan oleh pengguna lain',
-        );
+        throw new HttpException
+      ('Email Sudah Terdaftar',
+      HttpStatus.CREATED,
+      );
       }
     }
     // Update data pengguna kecuali kata sandi
@@ -178,7 +298,60 @@ export class AuthService {
     }
     const { password, ...userWithoutPassword } = user;
 
-
     return user;
   }
+
+  async uploadAvatar(file: Express.Multer.File, userId: string): Promise<any> {
+    try {
+      // Mengonversi file ke data base64
+      const fileBuffer = file.buffer.toString('base64');
+      const base64Data = `data:${file.mimetype};base64,${fileBuffer}`;
+
+      // Menyusun nama file dengan menambahkan timestamp untuk memastikan keunikan
+      const timestamp = new Date().getTime();
+      const fileName = `${timestamp}_${file.originalname}`;
+
+      // Menyimpan data base64 ke database dengan menyertakan filename yang baru
+      const uploadedFile = await this.uploadService.create(
+        fileName, // Gunakan nama file yang baru disusun
+        base64Data,
+        userId,
+      );
+
+      return uploadedFile;
+    } catch (error) {
+      throw new BadRequestException('Gagal mengunggah file: ' + error.message);
+    }
+  }
+
+  async updateUserAvatar(
+    userId: string,
+    data: string,
+    filename: string,
+  ): Promise<any> {
+    try {
+      // Memanggil metode update dari UploadService dengan data, userId, dan filename
+      const result = await this.uploadService.update(data, userId, filename);
+      return result;
+    } catch (error) {
+      // Tangani pengecualian di sini jika diperlukan
+      throw new ForbiddenException(
+        'Failed to update user avatar: ' + error.message,
+      );
+    }
+  }
+
+  // async updateUserStatus(nip: number, status: UserStatus): Promise<User> {
+  //   const user = await this.userService.findOneById(nip);
+
+  //   if (!user) {
+  //     throw new NotFoundException(`User with NIP ${nip} not found`);
+  //   }
+
+  //   user.status = status;
+  //   await user.save();
+
+  //   return user;
+  // }
+
 }

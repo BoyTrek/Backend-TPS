@@ -72,7 +72,7 @@ export class UploadService {
     return deletedRows; // Jumlah baris yang dihapus (0 jika tidak ada data yang dihapus)
   }
 
-  async update(data: string, userId: string, filename: string) {
+  async update(data: string, userId: string) {
     const existingAvatar = await this.getOneByUserId(userId);
     if (!existingAvatar) {
       throw new ForbiddenException("User doesn't have an avatar");
@@ -80,9 +80,9 @@ export class UploadService {
   
     // Lakukan pembaruan avatar berdasarkan userId, data, dan filename
     const [numberOfAffectedRows, [updatedFile]] = await this.databaseFilesRepository.update(
-      { data, filename },
-      { where: { userId: Number(userId) }, returning: true }
-    );
+      { data },
+      { where: { userId: userId }, returning: true }
+   );   
   
     // Pastikan pembaruan berhasil dan ada file yang diperbarui
     if (numberOfAffectedRows === 0 || !updatedFile) {

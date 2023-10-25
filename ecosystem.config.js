@@ -1,46 +1,30 @@
 module.exports = {
   apps: [
     {
-      name: 'app1',
+      name: 'Server 1',
       script: 'dist/main.js',
       instances: 1,
-      autorestart: true,
+      exec_mode: 'cluster',
       watch: false,
-      max_memory_restart: '1G',
+      ignore_watch: ['node_modules'],
       env: {
         NODE_ENV: 'production',
-        PORT: 4000,
-        DB_HOST: '192.168.1.50',
-        DB_PORT: 5432,
-        DB_USER: 'postgres',
-        DB_PASS: 'fadhil',
-        DB_DIALECT: 'postgres',
-        DB_NAME: 'projek',
-        JWTKEY: 'random_secret_key',
-        TOKEN_EXPIRATION: '1h',
-        BEARER: 'Bearer',
+        PORT: 4000, // Atur port untuk Server 1
       },
+      namespace: 'Server 1', // Menentukan namespace untuk instance ini
     },
     {
-      name: 'app2',
+      name: 'Server 2',
       script: 'dist/main.js',
       instances: 1,
-      autorestart: true,
+      exec_mode: 'cluster',
       watch: false,
-      max_memory_restart: '1G',
+      ignore_watch: ['node_modules'],
       env: {
         NODE_ENV: 'production',
-        PORT: 4001,
-        DB_HOST: '192.168.1.50',
-        DB_PORT: 5432,
-        DB_USER: 'postgres',
-        DB_PASS: 'fadhil',
-        DB_DIALECT: 'postgres',
-        DB_NAME: 'projek',
-        JWTKEY: 'random_secret_key',
-        TOKEN_EXPIRATION: '1h',
-        BEARER: 'Bearer',
+        PORT: 4001, // Atur port yang berbeda untuk Server 2
       },
+      namespace: 'Server 2', // Menentukan namespace untuk instance ini
     },
   ],
 };

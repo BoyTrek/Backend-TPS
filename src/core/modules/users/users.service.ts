@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { USER_REPOSITORY } from 'src/core/constants';
-import { User } from './User.entity';
+import { User } from './user.entity';
 import { UserDto, UserStatus } from './user.dto';
 
 @Injectable()
@@ -17,7 +17,7 @@ export class UsersService {
     return await this.userRepository.findOne<User>({ where: { email } });
   }
 
-  async findOneById(nip: number): Promise<User> {
+  async findOneById(nip: string): Promise<User> {
     return await this.userRepository.findOne<User>({ where: { nip } });
   }
 
@@ -25,7 +25,7 @@ export class UsersService {
     return await this.userRepository.findAll<User>();
   }
 
-  async updatePassword(userId: number, newPassword: string) {
+  async updatePassword(userId: string, newPassword: string) {
     const user = await this.userRepository.findByPk(userId);
 
     if (!user) {
@@ -37,7 +37,7 @@ export class UsersService {
     await user.save();
   }
 
-  async deleteUser(userId: number): Promise<{ message: string }> {
+  async deleteUser(userId: string): Promise<{ message: string }> {
     const user = await this.userRepository.findByPk(userId);
   
     if (!user) {

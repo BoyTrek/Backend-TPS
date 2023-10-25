@@ -8,10 +8,17 @@ import {
 } from 'sequelize-typescript';
 import { Team } from '../team/team.entity';
 import { User } from '../users/user.entity';
-import { UserRole } from '../users/user.dto';
 
 @Table
 export class Member extends Model<Member> {
+  @Column({
+    type: DataType.INTEGER,
+    primaryKey: true, // Mengatur kolom sebagai primary key
+    autoIncrement: true, // Mengatur kolom sebagai auto-increment
+    allowNull: false,
+    field: 'idMember', // Mengatur nama kolom ID
+  })
+  idMember: number; // Kolom ID dengan nama idMember
 
   @ForeignKey(() => Team)
   @Column({
@@ -32,11 +39,4 @@ export class Member extends Model<Member> {
 
   @BelongsTo(() => User)
   user: User;
-
-  // @Column({
-  //   type: DataType.ENUM,
-  //   values: Object.values(UserRole),
-  //   defaultValue: UserRole.USER,
-  // })
-  // role : UserRole;
 }

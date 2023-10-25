@@ -26,7 +26,6 @@ export class TaskService {
     teamId: number,
     memberId: number,
     projectId: number,
-    forUser: string,
   ): Promise<Task> {
     // Pastikan idTim, memberId, dan projectId yang diberikan valid
     const team = await this.teamRepository.findByPk(teamId);
@@ -86,4 +85,53 @@ export class TaskService {
     // Setelah tugas dihapus, log pesan informasi.
     this.logger.log(`Tugas dengan ID ${id} telah dihapus.`);
   }
+
+  async getTasksByUserId(userId: number): Promise<Task[]> {
+    const tasks = await this.taskRepository.findAll<Task>({
+      where: {
+        memberId: userId,
+      },
+      include: [{ all: true }], // Mengambil semua data terkait
+    });
+  
+    if (!tasks || tasks.length === 0) {
+      throw new NotFoundException(`No tasks found for user with ID ${userId}`);
+    }
+  
+    return tasks;
+  }
+
+//   async getTasksByMemberId(memberId: number): Promise<Task[]> {
+//   const tasks = await this.taskRepository.findAll({
+//     where: {
+//       memberId: memberId,
+//     },
+//     include: [Team, Member, Project], // Sertakan relasi yang dibutuhkan (jika ada)
+//   });
+//   return tasks;
+// }
+
+async getTasksByMemberId(memberId: number): Promise<Task[]> {
+  const tasks = await this.taskRepository.findAll({
+    where: {
+      memberId: memberId,
+    },
+  });
+  if (!tasks || tasks.length === 0) {
+    throw new NotFoundException(`No tasks found for member with ID ${memberId}`);
+  }
+  return tasks;
+}
+
+async getTasksByForUser(forUser: string): Promise<Task[]> {
+  const tasks = await this.taskRepository.findAll({
+    where: {
+      forUser: forUser,
+    },
+  });
+  if (!tasks || tasks.length === 0) {
+    throw new NotFoundException(`No tasks found for user with ID ${forUser}`);
+  }
+  return tasks;
+}
 }

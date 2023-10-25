@@ -2,7 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, SetMe
 import { Reflector } from '@nestjs/core';
 import { UsersService } from '../modules/users/users.service';
 import { Observable } from 'rxjs';
-import { User } from '../modules/users/User.entity';
+import { User } from '../modules/users/user.entity';
 import { AuthService } from '../modules/auth/auth.service'; // Pastikan telah mengimpor AuthService
 
 export const ROLES_KEY = 'roles';

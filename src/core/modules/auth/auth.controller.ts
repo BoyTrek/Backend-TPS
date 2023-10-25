@@ -68,7 +68,7 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('/user/by-nip/:nip')
-  async getUserByNip(@Param('nip') nip: number) {
+  async getUserByNip(@Param('nip') nip: string) {
     try {
       // Panggil metode findByNip dari AuthService untuk mencari pengguna berdasarkan NIP
       const user = await this.authService.findByNip(nip);
@@ -85,13 +85,9 @@ export class AuthController {
     }
   }
 
-  // @hasRoles(UserRole.SUPERADMIN)
-  // @UseGuards(AuthGuard('jwt'), RolesGuard, DoesUserExist)
-  @ApiParam({ name: 'nip', description: 'NIP', type: 'number' })
-  @ApiParam({ name: 'name', description: 'Name', type: 'string' })
-  @ApiParam({ name: 'email', description: 'Email', type: 'string' })
-  @ApiParam({ name: 'password', description: 'Password', type: 'string' })
-  @ApiParam({ name: 'role', description: 'Role', type: 'enum' })
+  @hasRoles(UserRole.SUPERADMIN)
+  @UseGuards(AuthGuard('jwt'), RolesGuard, DoesUserExist)
+
   @Post('/signup')
   async registerAndSendPassword(@Body() user: UserDto) {
     // Panggil metode create di AuthService untuk membuat pengguna dengan kata sandi acak
@@ -111,7 +107,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Put('/update-password/:userId')
   async updatePassword(
-    @Param('userId') userId: number,
+    @Param('userId') userId: string,
     @Body('currentPassword') currentPassword: string,
     @Body('newPassword') newPassword: string,
   ) {
@@ -122,11 +118,9 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Put('/update-user/:userId')
   async updateUser(
-    @Param('userId') userId: number,
+    @Param('userId') userId: string,
     @Body() updateUserDto: Partial<UserDto>,
   ) {
-    try {
-      // Panggil metode updateUser dari service
       const updatedUser = await this.authService.updateUser(
         userId,
         updateUserDto,
@@ -134,22 +128,11 @@ export class AuthController {
 
       // Jika pembaruan berhasil, kembalikan data pengguna yang diperbarui
       return { message: 'User updated successfully', user: updatedUser };
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        'Terjadi kesalahan dalam mengupdate pengguna.',
-      );
-    }
+    
   }
-
   @Delete('user/:nip')
   async deleteUser(
-    @Param('nip', ParseIntPipe) nip: number,
+    @Param('nip') nip: string,
   ): Promise<{ message: string }> {
     await this.authService.deleteUser(nip);
     return { message: 'Data berhasil dihapus' };
@@ -186,42 +169,34 @@ export class AuthController {
     @UploadedFile() file: Express.Multer.File,
     @Param('userId') userId: string,
   ): Promise<any> {
-    try {
+    {
       const uploadedFile = await this.authService.uploadAvatar(file, userId);
       return { message: 'File berhasil diunggah', file: uploadedFile };
-    } catch (error) {
-      throw new BadRequestException('Gagal mengunggah file: ' + error.message);
-    }
+    }  
   }
 
-  @Put('avatar/:userId')
-  @UseInterceptors(FileInterceptor('avatar')) // Gunakan 'avatar' sebagai nama field untuk file
-  async updateAvatar(
-    @Param('userId') userId: string,
-    @UploadedFile() avatar: Express.Multer.File,
-    @Body('filename') filename: string,
-  ): Promise<any> {
-    try {
-      // Pastikan 'avatar' ada nilainya sebelum memanggil service
-      if (!avatar) {
-        throw new BadRequestException('Invalid avatar');
-      }
-
-      // Lakukan pembaruan avatar berdasarkan userId, avatar, dan filename
-      const base64Data = `data:${
-        avatar.mimetype
-      };base64,${avatar.buffer.toString('base64')}`;
-      const updatedFile = await this.authService.updateUserAvatar(
-        userId,
-        base64Data,
-        filename,
-      );
-
-      return { message: 'Avatar updated successfully', avatar: updatedFile };
-    } catch (error) {
-      throw new BadRequestException(error.message);
+@Put('avatar/:userId')
+@UseInterceptors(FileInterceptor('avatar')) // Gunakan 'avatar' sebagai nama field untuk file
+async updateAvatar(
+  @Param('userId') userId: string,
+  @UploadedFile() avatar: Express.Multer.File,
+): Promise<any> {
+  try {
+    // Pastikan 'avatar' ada nilainya sebelum memanggil service
+    if (!avatar) {
+      throw new BadRequestException('Invalid avatar');
     }
+
+    // Lakukan pembaruan avatar berdasarkan userId dan avatar
+    const base64Data = `data:${avatar.mimetype};base64,${avatar.buffer.toString('base64')}`;
+    const updatedFile = await this.authService.updateUserAvatar(userId, base64Data);
+
+    return { message: 'Avatar updated successfully', avatar: updatedFile };
+  } catch (error) {
+    throw new BadRequestException(error.message);
   }
+}
+
 
   @Delete('avatar/:userId') // Menggunakan userId sebagai parameter route
   async remove(@Param('userId') userId: string) {

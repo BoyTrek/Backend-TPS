@@ -1,5 +1,5 @@
 import { Column, DataType, Table, BelongsTo, ForeignKey, Model } from 'sequelize-typescript';
-import { User } from 'src/core/modules/users/User.entity';
+import { User } from 'src/core/modules/users/user.entity';
 
 interface DatabaseFileType {
   filename: string;
@@ -7,7 +7,7 @@ interface DatabaseFileType {
   userId: string; // Menggunakan STRING untuk menyimpan ID pengguna
 }
 
-@Table({ tableName: 'files' })
+@Table
 export class DatabaseFile extends Model<DatabaseFile, DatabaseFileType> {
   @Column({
     type: DataType.INTEGER,

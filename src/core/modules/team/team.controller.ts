@@ -9,10 +9,12 @@ import {
   UseGuards,
   NotFoundException,
   SetMetadata,
+  HttpStatus,
+  HttpException,
 } from '@nestjs/common';
 import { TeamService } from './team.service';
-import { Team as TeamEntity } from './team.entity';
-import { Member as MemberEntity } from '../member/member.entity';
+import { Team, Team as TeamEntity } from './team.entity';
+import { Member, Member as MemberEntity } from '../member/member.entity';
 import { AuthGuard } from '@nestjs/passport';
 import { TeamDto } from './team.dto';
 import { MemberDTO } from '../member/member.dto';
@@ -25,15 +27,23 @@ import { ApiParam } from '@nestjs/swagger';
 export class TeamController {
   constructor(private readonly teamService: TeamService) {}
 
-  @hasRoles(UserRole.SUPERADMIN)
+  // @hasRoles(UserRole.SUPERADMIN)
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Get()
+  @Get('/allTeam')
   async findAll() {
     // Dapatkan semua tim dalam database
     return await this.teamService.findAll();
   }
 
-  @hasRoles(UserRole.ADMIN, UserRole.USER)
+  // @hasRoles(UserRole.SUPERADMIN)
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get('/teamProp')
+  async findFull() {
+    // Dapatkan semua tim dalam database
+    return await this.teamService.findFull();
+  }
+
+  // @hasRoles(UserRole.ADMIN, UserRole.USER)
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get('/:userNip')
   async findByUserId(@Param('userNip') userId: string): Promise<TeamEntity[]> {
@@ -57,7 +67,7 @@ export class TeamController {
     return await this.teamService.create(team, req.user.nip);
   }
 
-  @hasRoles(UserRole.ADMIN)
+  // @hasRoles(UserRole.ADMIN)
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post(':idTim/add-member')
   async addMemberToTeam(
@@ -78,22 +88,7 @@ export class TeamController {
     }
   }
 
-  // @Get(':idTim/members')
-  // async findMembersByTeamId(
-  //   @Param('idTim') idTim: number,
-  // ): Promise<MemberEntity[]> {
-  //   try {
-  //     const members = await this.teamService.findMembersByTeamId(idTim);
-  //     return members;
-  //   } catch (error) {
-  //     if (error instanceof NotFoundException) {
-  //       throw new NotFoundException(error.message);
-  //     }
-  //     throw error;
-  //   }
-  // }
-
-  @hasRoles(UserRole.ADMIN)
+  // @hasRoles(UserRole.ADMIN)
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Delete(':idTim/members/:nip')
   async deleteMember(
@@ -110,7 +105,7 @@ export class TeamController {
     }
   }
 
-  @hasRoles(UserRole.ADMIN)
+  // @hasRoles(UserRole.ADMIN)
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Delete(':idTim')
   async deleteTeam(@Param('idTim') idTim: number): Promise<void> {
@@ -123,4 +118,14 @@ export class TeamController {
       throw error;
     }
   }
+
+ @Get('members/:idTim')
+  async findMembersByTeamId(@Param('idTim') idTim: number): Promise<Member[]> {
+      const members = await this.teamService.findMembersByTeamId(idTim);
+      if (!members || members.length === 0) {
+        throw new HttpException (`No members found for team with ID`, HttpStatus.OK);
+      }
+      return members;
+  }
+
 }

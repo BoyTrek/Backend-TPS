@@ -9,9 +9,12 @@ import {
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
-import { User } from '../users/User.entity';
+import { User } from '../users/user.entity';
 import { MailService } from '../mail/mail.service';
 import { UploadService } from 'src/core/upload/upload.service';
+import * as multer from 'multer';
+import { File } from 'buffer';
+import * as path from 'path';
 
 @Injectable()
 export class AuthService {
@@ -26,18 +29,17 @@ export class AuthService {
 
 
   async forgotPassword(email: string) {
-    
     const user = await this.userService.findOneByEmail(email);
     if (!user) {
-      throw new NotFoundException('Email is not associated with a user.');
+      throw new HttpException('Email tidak terdaftar', HttpStatus.OK);
     }
 
     const resetPasswordToken = this.jwtService.sign(
       { email },
-      { expiresIn: '60s' },
+      { expiresIn: '360s' },
     );
 
-    const resetLink = `http://192.168.1.4:3000/authentication/repassword`;
+    const resetLink = `http://192.168.1.4:3000/authentication/repassword?token=${resetPasswordToken}`;
 
     const emailContent = `
       <p>Hello!</p>
@@ -50,12 +52,13 @@ export class AuthService {
     user.resetPasswordExpires = resetPasswordToken;
     await user.save();
 
-    
     // Kirim email verifikasi dengan token reset password ke pengguna
     this.mailService.sendForgotPasswordEmail(user.email, emailContent);
 
-    return {message: 'Password reset email sent successfully' , resetPasswordToken};
-
+    return {
+      message: 'Password reset email sent successfully',
+      resetPasswordToken,
+    };
   }
 
   async resetPassword(
@@ -72,16 +75,21 @@ export class AuthService {
 
       // Validasi kata sandi baru dan konfirmasi kata sandi
       if (newPassword !== newRepassword) {
-        throw new BadRequestException(
-          'Password and confirmation password do not match.',
+        throw new HttpException(
+          'Password dan confirmation password tidak sesuai.',
+          HttpStatus.OK,
         );
       }
 
       // Validasi waktu kedaluwarsa token
-      if (user.resetPasswordExpires && new Date() > new Date(user.resetPasswordExpires)) {
-        
-      throw new BadRequestException('Reset password link has expired. Please request a new one.');
-    }
+      if (
+        user.resetPasswordExpires &&
+        new Date() > new Date(user.resetPasswordExpires)
+      ) {
+        throw new HttpException(
+          'Reset password link sudah expired. silahkan request lagi.', HttpStatus.OK
+        );
+      }
 
       // Hash kata sandi baru
       const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -96,9 +104,10 @@ export class AuthService {
       // Kemudian, Anda dapat mengembalikan respons sukses
       return 'Password reset successfully';
     } catch (error) {
-      throw new BadRequestException('Invalid or expired token.');
+      throw new HttpException('Invalid atau expired token.', HttpStatus.OK);
     }
   }
+
   private failedLoginAttempts = new Map<string, number>();
 
   async validateUser(username: string, pass: string) {
@@ -148,6 +157,27 @@ export class AuthService {
     return { user, token };
   }
 
+  //Login Dengan response base64 juga
+  // async login(user: User): Promise<{ user: User; token: string; avatar: any }> {
+  //   try {
+  //     // Ambil avatar dari basis data atau server menggunakan service uploadService
+  //     const avatar = await this.uploadService.getOneByUserId(user.nip);
+  
+  //     // Generate token
+  //     const token = await this.generateToken(user);
+  
+  //     // Sertakan avatar dalam respons
+  //     return { user, token, avatar };
+  //   } catch (error) {
+  //     // Tangani kesalahan jika terjadi
+  //     throw new HttpException(
+  //       'Gagal login: ' + error.message,
+  //       HttpStatus.INTERNAL_SERVER_ERROR,
+  //     );
+  //   }
+  // }
+  
+
   private generateRandomPassword(): string {
     const characters =
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -161,8 +191,6 @@ export class AuthService {
 
     return password;
   }
-
-  
 
   public async create(user) {
     // Generate a random password
@@ -202,7 +230,7 @@ export class AuthService {
   }
 
   async updatePassword(
-    userId: number,
+    userId: string,
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
@@ -229,7 +257,7 @@ export class AuthService {
   }
 
   // auth.service.ts
-  async deleteUser(userNip: number): Promise<void> {
+  async deleteUser(userNip: string): Promise<void> {
     const user = await this.userService.findOneById(userNip);
 
     if (!user) {
@@ -241,7 +269,7 @@ export class AuthService {
   }
 
   async updateUser(
-    userId: number,
+    userId: string,
     updatedUserData: Partial<User>,
   ): Promise<User> {
     // Temukan pengguna berdasarkan ID
@@ -289,7 +317,7 @@ export class AuthService {
     return match;
   }
 
-  async findByNip(nip: number): Promise<User | null> {
+  async findByNip(nip: string): Promise<User | null> {
     // Cari pengguna berdasarkan NIP menggunakan layanan UsersService
     const user = await this.userService.findOneById(nip);
 
@@ -303,43 +331,48 @@ export class AuthService {
 
   async uploadAvatar(file: Express.Multer.File, userId: string): Promise<any> {
     try {
-      // Mengonversi file ke data base64
-      const fileBuffer = file.buffer.toString('base64');
-      const base64Data = `data:${file.mimetype};base64,${fileBuffer}`;
-
+      // Get the file extension
+      const fileExtension = path.extname(file.originalname).toLowerCase();
+  
+      // Check if the file extension is allowed
+      if (['.jpg', '.jpeg', '.png'].includes(fileExtension)) {
+        // File extension is allowed, proceed with processing
+        const fileBuffer = file.buffer.toString('base64');
+        const base64Data = `data:${file.mimetype};base64,${fileBuffer}`;
+  
       // Menyusun nama file dengan menambahkan timestamp untuk memastikan keunikan
       const timestamp = new Date().getTime();
       const fileName = `${timestamp}_${file.originalname}`;
-
+  
       // Menyimpan data base64 ke database dengan menyertakan filename yang baru
       const uploadedFile = await this.uploadService.create(
         fileName, // Gunakan nama file yang baru disusun
         base64Data,
         userId,
       );
-
-      return uploadedFile;
-    } catch (error) {
-      throw new BadRequestException('Gagal mengunggah file: ' + error.message);
+  
+      return uploadedFile; // Return the uploaded file details if needed
+    } else {
+      // File extension is not allowed, throw an error
+      throw new HttpException('File tidak valid, hanya menerima JPG, JPEG, dan PNG.', HttpStatus.OK);
     }
+  } catch (error) {
+    throw new HttpException('File tidak valid, hanya menerima JPG, JPEG, dan PNG.', HttpStatus.OK);
   }
+}
 
-  async updateUserAvatar(
-    userId: string,
-    data: string,
-    filename: string,
-  ): Promise<any> {
-    try {
-      // Memanggil metode update dari UploadService dengan data, userId, dan filename
-      const result = await this.uploadService.update(data, userId, filename);
-      return result;
-    } catch (error) {
-      // Tangani pengecualian di sini jika diperlukan
-      throw new ForbiddenException(
-        'Failed to update user avatar: ' + error.message,
-      );
-    }
+async updateUserAvatar(userId: string, data: string): Promise<any> {
+  try {
+    // Memanggil metode update dari UploadService dengan data dan userId
+    const result = await this.uploadService.update(data, userId);
+    return result;
+  } catch (error) {
+    // Tangani pengecualian di sini jika diperlukan
+    throw new ForbiddenException(
+      'Failed to update user avatar: ' + error.message,
+    );
   }
+}
 
   // async updateUserStatus(nip: number, status: UserStatus): Promise<User> {
   //   const user = await this.userService.findOneById(nip);
